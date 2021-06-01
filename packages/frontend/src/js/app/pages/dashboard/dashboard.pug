@@ -3,11 +3,11 @@
         <Quickview :town="quickview.town" :origin="quickview.originEvent" @outside-click="hideQuickview"></Quickview>
         <POIView :poi="poiview.poi" :origin="poiview.originEvent" @outside-click="hidePOIView" ></POIView>
 
-        <NavBar></NavBar>
+        <NavBar class="print:hidden"></NavBar>
 
         <section class="dashboard">
             //- filters
-            <simplebar class="filters" ref="filters" data-simplebar-auto-hide="false">
+            <simplebar class="filters print:hidden" ref="filters" data-simplebar-auto-hide="false">
                 <FilterGroup v-for="filterGroup in allowedFilters" :id="filterGroup.id" :key="filterGroup.id" :faIcon="filterGroup.faIcon" :icon="filterGroup.icon" :label="filterGroup.label" :options="filterGroup.options" :opened="filterGroup.opened"></FilterGroup>
             </simplebar>
 

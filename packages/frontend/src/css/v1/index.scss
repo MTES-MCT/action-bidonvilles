@@ -141,6 +141,10 @@
   }
 
   .leaflet-control-zoom a {
+    @media print {
+        display: none;
+    }
+
     width: 30px;
     height: 30px;
     line-height: 30px;
@@ -412,6 +416,12 @@
         height: 3.5rem;
         border: 3px solid red;
       }
+    }
+  }
+
+  .leaflet-control-layers {
+    @media print {
+        display: none
     }
   }
 

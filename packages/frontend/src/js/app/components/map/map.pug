@@ -1,12 +1,12 @@
 <section class="map">
-    <Address :placeholder="placeholder" v-model="address" v-if="displaySearchbar"></Address>
+    <Address :placeholder="placeholder" v-model="address" v-if="displaySearchbar" class="print:hidden"></Address>
 
     <div id="map">
-        <div ref="adressToggler" class="leaflet-address-toggler">
+        <div ref="adressToggler" class="leaflet-address-toggler print:hidden">
             <input type="checkbox" v-model="showAddresses" /> Voir les adresses des sites
         </div>
 
-        <div ref="legends" class="leaflet-legend">
+        <div ref="legends" class="leaflet-legend print:hidden">
             <h1>Légende</h1>
             <p v-for="fieldType in fieldTypes">
                 <span v-bind:style="{ 'background-color': fieldType.color }"></span> {{ fieldType.label }}

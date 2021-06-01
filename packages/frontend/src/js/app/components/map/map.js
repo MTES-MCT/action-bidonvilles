@@ -283,6 +283,12 @@ export default {
     mounted() {
         this.createMap();
         this.syncTownMarkers();
+        window.onbeforeprint = () => {
+            this.showAddresses = true;
+        };
+        window.onafterprint = () => {
+            this.showAddresses = false;
+        };
     },
 
     methods: {
