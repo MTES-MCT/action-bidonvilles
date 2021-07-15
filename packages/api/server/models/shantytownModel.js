@@ -1,4 +1,6 @@
 const { fromTsToFormat } = require('#server/utils/date');
+const { where } = require('#server/services/permissionService');
+const { buildWhere } = require('#server/utils/sql');
 
 /**
  * Converts a date column to a timestamp
@@ -704,51 +706,30 @@ module.exports = (database) => {
      *
      * @returns {Array.<Object>}
      */
-    async function query(where = [], order = ['departements.code ASC', 'cities.name ASC'], user, feature, includeChangelog = false) {
-        const replacements = {};
+    async function query(whereConditions = [], order = ['departements.code ASC', 'cities.name ASC'], user, feature, includeChangelog = false) {
+        const { statement, replacement } = buildWhere('shantytowns', whereConditions);
 
-        const featureLevel = user.permissions.shantytown[feature].geographic_level;
-        const userLevel = user.organization.location.type;
-        if (featureLevel !== 'nation' && (featureLevel !== 'local' || userLevel !== 'nation')) {
-            const level = featureLevel === 'local' ? userLevel : featureLevel;
-            if (user.organization.location[level] === null) {
-                return [];
+        try {
+            const permissionFilter = where().can(user).do(feature, 'shantytown');
+
+            if (permissionFilter !== null) {
+                statement.push(`(${permissionFilter.statement})`);
+                Object.assign(replacement, permissionFilter.replacements);
             }
-
-            const clauseGroup = {
-                location: {
-                    query: `${fromGeoLevelToTableName(level)}.code`,
-                    value: user.organization.location[level].code,
-                },
-            };
-            where.push(clauseGroup);
-
-            if (level === 'city') {
-                clauseGroup.location_main_city = {
-                    query: `${fromGeoLevelToTableName(level)}.fk_main`,
-                    value: user.organization.location[level].code,
-                };
-            }
+        } catch (error) {
+            // une erreur doit signifier que l'utilisateur n'a pas les permissions nécessaires, donc on retourne un tableau vide
+            return [];
         }
-
-        const whereClause = where.map((clauses, index) => {
-            const clauseGroup = Object.keys(clauses).map((column) => {
-                replacements[`${column}${index}`] = clauses[column].value || clauses[column];
-                return `${clauses[column].query || `shantytowns.${column}`} ${clauses[column].not ? 'NOT ' : ''}IN (:${column}${index})`;
-            }).join(' OR ');
-
-            return `(${clauseGroup})`;
-        }).join(' AND ');
 
         const towns = await database.query(
             getBaseSql(
                 'regular',
-                where.length > 0 ? whereClause : null,
+                statement.length > 0 ? statement.join(' AND ') : null,
                 order.join(', '),
             ),
             {
                 type: database.QueryTypes.SELECT,
-                replacements,
+                replacements: replacement,
             },
         );
 
@@ -775,12 +756,12 @@ module.exports = (database) => {
                 database.query(
                     getBaseSql(
                         'history',
-                        where.length > 0 ? whereClause : null,
+                        statement.length > 0 ? statement.join(' AND ') : null,
                         ['shantytowns.shantytown_id ASC', 'shantytowns."archivedAt" ASC'].join(', '),
                     ),
                     {
                         type: database.QueryTypes.SELECT,
-                        replacements,
+                        replacements: replacement,
                     },
                 ),
             );
@@ -968,12 +949,12 @@ module.exports = (database) => {
 
     methods.getHistory = async (user, permission) => {
         // apply geographic level permission
-        const where = [];
+        const whereArr = [];
         const highCovidWhere = [];
         const replacements = {};
         if (user.permissions[permission.entity][permission.feature].geographic_level !== 'nation'
-                && user.organization.location.type !== 'nation') {
-            where.push(`${fromGeoLevelToTableName(user.organization.location.type)}.code = :locationCode`);
+            && user.organization.location.type !== 'nation') {
+            whereArr.push(`${fromGeoLevelToTableName(user.organization.location.type)}.code = :locationCode`);
             highCovidWhere.push('d2.code = :locationCode');
             replacements.locationCode = user.organization.location[user.organization.location.type].code;
         }
@@ -1020,7 +1001,7 @@ module.exports = (database) => {
                         LEFT JOIN shantytowns AS s ON shantytowns.shantytown_id = s.shantytown_id
                         ${SQL.joins.map(({ table, on }) => `LEFT JOIN ${table} ON ${on}`).join('\n')}
                         WHERE s.shantytown_id IS NOT NULL /* filter out history of deleted shantytowns */
-                        ${where.length > 0 ? `AND (${where.join(') AND (')})` : ''}
+                        ${whereArr.length > 0 ? `AND (${whereArr.join(') AND (')})` : ''}
                     )
                     UNION
                     (
@@ -1051,7 +1032,7 @@ module.exports = (database) => {
                             NULL AS "highCommentDptCode"
                         FROM shantytowns
                         ${SQL.joins.map(({ table, on }) => `LEFT JOIN ${table} ON ${on}`).join('\n')}
-                        ${where.length > 0 ? `WHERE (${where.join(') AND (')})` : ''}
+                        ${whereArr.length > 0 ? `WHERE (${whereArr.join(') AND (')})` : ''}
                     )
                     UNION
                     (
@@ -1088,7 +1069,7 @@ module.exports = (database) => {
                         LEFT JOIN shantytown_covid_comments covid_comments ON covid_comments.fk_comment = comments.shantytown_comment_id
                         ${SQL.joins.map(({ table, on }) => `LEFT JOIN ${table} ON ${on}`).join('\n')}
                         WHERE shantytowns.shantytown_id IS NOT NULL /* filter out history of deleted shantytowns */
-                        ${where.length > 0 ? `AND (${where.join(') AND (')})` : ''}
+                        ${whereArr.length > 0 ? `AND (${whereArr.join(') AND (')})` : ''}
                     )
                     UNION
                     (

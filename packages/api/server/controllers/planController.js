@@ -475,8 +475,18 @@ module.exports = models => ({
 
     async find(req, res) {
         try {
-            const plans = await models.plan.findOne(req.user, req.params.id);
-            res.status(200).send(plans);
+            const plan = await models.plan.findOne(req.user, req.params.id);
+
+            if (plan === null) {
+                res.status(404).send({
+                    error: {
+                        user_message: 'Le dispositif demandé n\'existe pas',
+                    },
+                });
+                return;
+            }
+
+            res.status(200).send(plan);
         } catch (error) {
             res.status(500).send({
                 error: {

@@ -1,3 +1,5 @@
+const merge = require('deepmerge');
+
 module.exports = {
     raw(override = {}) {
         const defaultObj = {
@@ -8,6 +10,6 @@ module.exports = {
             image: 'https://api.resorption-bidonvilles.localhost/assets/changelog/0.0.0/item_1.jpg',
         };
 
-        return Object.assign(defaultObj, override);
+        return merge(defaultObj, override);
     },
 };

@@ -118,6 +118,14 @@ export default {
                     ? permission.geographic_level
                     : this.user.organization.location.type;
 
+            if (
+                !permission.write &&
+                permission.geographic_level === "local" &&
+                ["epci", "city"].includes(this.user.organization.location.type)
+            ) {
+                level = "departement";
+            }
+
             if (level === "nation") {
                 return true;
             } else if (this.user.organization.location[level] === null) {

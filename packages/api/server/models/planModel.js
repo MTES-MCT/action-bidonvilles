@@ -1,44 +1,11 @@
+const { can, where } = require('#server/services/permissionService');
+
 const locationTypes = {
     shantytowns: 'sur site(s) : bidonville ou squat',
     location: 'sur terrain d\'insertion',
     housing: 'dans le logement',
     other: 'dans plusieurs lieux (hébergement, permanence, rue...)',
 };
-
-function hasPermission(user, plan, feature) {
-    if (!user.permissions.plan[feature] || !user.permissions.plan[feature].allowed) {
-        return false;
-    }
-
-    switch (user.permissions.plan[feature].geographic_level) {
-        case 'nation':
-            return true;
-
-        case 'local': {
-            const userLevel = user.organization.location.type;
-            switch (userLevel) {
-                case 'nation':
-                    return true;
-
-                case 'region':
-                    return user.organization.location.region.code === plan.region_code;
-
-                default:
-                    return user.organization.location.departement.code === plan.departement_code;
-            }
-        }
-
-        case 'own':
-            if (feature === 'updateMarks') {
-                return plan.operators.some(contact => contact.organization.id === user.organization.id);
-            }
-
-            return plan.managers.some(({ id }) => id === user.id);
-
-        default:
-            return false;
-    }
-}
 
 /**
  * Serializes a single plan row
@@ -48,6 +15,20 @@ function hasPermission(user, plan, feature) {
  * @returns {Object}
  */
 function serializePlan(user, permissions, plan) {
+    const location = {
+        type: 'departement',
+        region: {
+            code: plan.region_code,
+            name: plan.region_name,
+        },
+        departement: {
+            code: plan.departement_code,
+            name: plan.departement_name,
+        },
+        epci: null,
+        city: null,
+    };
+
     const base = {
         id: plan.id,
         name: plan.name,
@@ -77,10 +58,10 @@ function serializePlan(user, permissions, plan) {
         topics: plan.topics,
         createdBy: plan.createdBy,
         updatedBy: plan.updatedBy,
-        canUpdate: hasPermission(user, plan, 'update'),
-        canUpdateMarks: hasPermission(user, plan, 'updateMarks'),
-        canClose: plan.states && plan.states.length > 0 && hasPermission(user, plan, 'close'),
     };
+    base.canUpdate = can(user).do('update', 'plan').on(location, base);
+    base.canUpdateMarks = can(user).do('updateMarks', 'plan').on(location, base);
+    base.canClose = plan.states && plan.states.length > 0 && can(user).do('close', 'plan').on(location, base);
 
     if (!plan.finances || permissions.finances === null || permissions.finances.allowed !== true) {
         base.finances = [];
@@ -157,38 +138,20 @@ module.exports = (database) => {
     // eslint-disable-next-line global-require
     const shantytownModel = require('./shantytownModel')(database);
     async function query(user, feature, filters = {}) {
-        const where = [];
+        const whereStatement = [];
         const replacements = Object.assign({}, filters);
 
-        // check if a location filter should be applied (ie. the feature is not allowed on a national level)
-        const featureLevel = user.permissions.plan[feature].geographic_level;
-        const userLevel = user.organization.location.type;
+        let permissionFilter;
+        try {
+            permissionFilter = where().can(user).do(feature, 'plan');
 
-        // list-read
-        if (featureLevel === 'own') {
-            // not supported at the moment
-        } else if (featureLevel !== 'nation' && userLevel !== 'nation') {
-            const levelValue = {
-                city: 1,
-                epci: 2,
-                departement: 3,
-                region: 4,
-            };
-
-            let level;
-            if (featureLevel === 'local' || levelValue[featureLevel] <= levelValue[userLevel]) {
-                level = userLevel;
-            } else {
-                level = featureLevel;
+            if (permissionFilter !== null) {
+                whereStatement.push(permissionFilter.statement);
+                Object.assign(replacements, permissionFilter.replacements);
             }
-
-            if (level === 'region') {
-                where.push('regions.code = :locationCode');
-                replacements.locationCode = user.organization.location.region.code;
-            } else {
-                where.push('departements.code = :locationCode');
-                replacements.locationCode = user.organization.location.departement.code;
-            }
+        } catch (error) {
+            // une erreur doit signifier que l'utilisateur n'a pas les permissions nécessaires, donc on retourne un tableau vide
+            return [];
         }
 
         // integrate custom filters
@@ -198,22 +161,12 @@ module.exports = (database) => {
         });
 
         if (filterParts.length > 0) {
-            where.push(filterParts.join(' OR '));
+            whereStatement.push(filterParts.join(' OR '));
         }
 
         const rows = await database.query(
             `SELECT
-                plans.plan_id AS id,
-                plans.name AS "name",
-                plans.started_at AS "startedAt",
-                plans.expected_to_end_at AS "expectedToEndAt",
-                plans.closed_at AS "closedAt",
-                plans.updated_at AS "updatedAt",
-                plans.in_and_out AS "inAndOut",
-                plans.goals AS "goals",
-                plans.location_type AS "locationType",
-                plans.location_details AS "locationDetails",
-                plans.final_comment AS "finalComment",
+                plans.*,
                 departements.code AS "departement_code",
                 departements.name AS "departement_name",
                 regions.code AS "region_code",
@@ -222,18 +175,36 @@ module.exports = (database) => {
                 (SELECT regexp_matches(locations.address, '^(.+) [0-9]+ [^,]+,? [0-9]+,? [^, ]+(,.+)?$'))[1] AS "location_address_simple",
                 locations.latitude AS "location_latitude",
                 locations.longitude AS "location_longitude",
-                plans.created_by AS "createdBy",
-                plans.updated_by AS "updatedBy",
                 plan_categories.uid AS "planCategoryUid",
                 plan_categories.name AS "planCategoryName"
-            FROM plans2 AS plans
+            FROM (
+                SELECT
+                    plans2.plan_id AS id,
+                    plans2.name AS "name",
+                    plans2.started_at AS "startedAt",
+                    plans2.expected_to_end_at AS "expectedToEndAt",
+                    plans2.closed_at AS "closedAt",
+                    plans2.updated_at AS "updatedAt",
+                    plans2.in_and_out AS "inAndOut",
+                    plans2.goals AS "goals",
+                    plans2.location_type AS "locationType",
+                    plans2.location_details AS "locationDetails",
+                    plans2.final_comment AS "finalComment",
+                    plans2.created_by AS "createdBy",
+                    plans2.updated_by AS "updatedBy",
+                    plans2.fk_category,
+                    plans2.fk_location,
+                    ARRAY(SELECT fk_user FROM plan_managers WHERE fk_plan = plans2.plan_id) AS plan_managers,
+                    ARRAY(SELECT fk_user FROM plan_operators WHERE fk_plan = plans2.plan_id) AS plan_operators
+                FROM plans2
+            ) AS plans
             LEFT JOIN plan_categories ON plans.fk_category = plan_categories.uid
-            LEFT JOIN plan_departements ON plan_departements.fk_plan = plans.plan_id
+            LEFT JOIN plan_departements ON plan_departements.fk_plan = plans.id
             LEFT JOIN departements ON plan_departements.fk_departement = departements.code
             LEFT JOIN regions ON departements.fk_region = regions.code
             LEFT JOIN locations ON plans.fk_location = locations.location_id
-            ${where.length > 0 ? `WHERE (${where.join(') AND (')})` : ''}
-            ORDER BY plans.plan_id ASC`,
+            ${whereStatement.length > 0 ? `WHERE (${whereStatement.join(') AND (')})` : ''}
+            ORDER BY plans.id ASC`,
             {
                 type: database.QueryTypes.SELECT,
                 replacements,
@@ -659,7 +630,7 @@ module.exports = (database) => {
 
         findOne: async (user, id) => {
             const rows = await query(user, 'read', {
-                plan_id: id,
+                id,
             });
 
             if (rows.length === 1) {
@@ -670,7 +641,7 @@ module.exports = (database) => {
         },
 
         delete: planId => database.query(
-            'DELETE FROM plans WHERE plan_id = :planId',
+            'DELETE FROM plans2 WHERE plan_id = :planId',
             {
                 replacements: {
                     planId,

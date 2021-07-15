@@ -1,3 +1,5 @@
+const merge = require('deepmerge');
+
 module.exports = {
     serialized(override = {}) {
         const defaultUser = {
@@ -96,6 +98,6 @@ module.exports = {
             last_changelog: '0.0.0',
         };
 
-        return Object.assign(defaultUser, override);
+        return merge(defaultUser, override);
     },
 };

@@ -113,7 +113,7 @@ module.exports = models => ({
         }
     },
 
-    async signin(req, res) {
+    async signin(req, res, next) {
         const { email, password } = req.body;
 
         if (typeof email !== 'string') {
@@ -142,9 +142,20 @@ module.exports = models => ({
             });
         }
 
-        const user = await models.user.findOneByEmail(email, {
-            auth: true,
-        });
+        let user;
+        try {
+            user = await models.user.findOneByEmail(email, {
+                auth: true,
+            });
+        } catch (error) {
+            res.status(500).send({
+                success: false,
+                error: {
+                    user_message: 'Une erreur est survenue lors de la lecture en base de données',
+                },
+            });
+            return next(error);
+        }
 
         if (user === null) {
             return res.status(403).send({

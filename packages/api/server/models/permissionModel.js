@@ -75,9 +75,11 @@ module.exports = (database) => {
                 permissions.fk_feature AS feature,
                 permissions.allowed,
                 permissions.fk_geographic_level AS geographic_level,
+                features.write,
                 ${entity}_permissions.*
             FROM ${entity}_permissions
             LEFT JOIN permissions ON ${entity}_permissions.fk_permission = permissions.permission_id
+            LEFT JOIN features ON permissions.fk_feature = features.name AND permissions.fk_entity = features.fk_entity
             ${where.length > 0 ? `WHERE ${where.join(' OR ')}` : ''}
             ORDER BY role_admin ASC, role_regular ASC, organization ASC, feature ASC
         `, {
@@ -102,6 +104,7 @@ module.exports = (database) => {
             const permission = {
                 allowed: row.allowed,
                 geographic_level: row.geographic_level,
+                write: row.write,
             };
 
             Object.keys(row).filter(key => key.substr(0, 5) === 'data_').forEach((key) => {

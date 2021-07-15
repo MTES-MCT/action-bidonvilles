@@ -1,5 +1,7 @@
 const permissionsDescription = require('#server/permissions_description');
 const { getPermissionsFor } = require('#server/utils/permission');
+const { where } = require('#server/services/permissionService');
+const { buildWhere } = require('#server/utils/sql');
 
 /**
  * @typedef {Object} UserFilters
@@ -86,6 +88,7 @@ function serializeUser(user, latestCharte, filters, permissionMap) {
                 city: user.city_code !== null ? {
                     code: user.city_code,
                     name: user.city_name,
+                    main: user.city_main,
                 } : null,
             },
         },
@@ -158,46 +161,29 @@ module.exports = (database) => {
     /**
      * Fetches a list of shantytowns from the database
      *
-     * @param {Array.<Object>} where   List of where clauses
+     * @param {Array.<Object>} whereConditions List of where clauses
      * @param {UserFilters}    filters
-     * @param {User}           [user]    The user's permissions are used for filtering the results of the query
-     * @param {String}         [feature] Permissions to be checked (necessary only if a user is provided)
+     * @param {User}           [user]          The user's permissions are used for filtering the results of the query
+     * @param {String}         [feature]       Permissions to be checked (necessary only if a user is provided)
      *
      * @returns {Array.<Object>}
      */
-    async function query(where = [], filters, user = null, feature) {
-        const replacements = {};
+    async function query(whereConditions = [], filters, user = null, feature) {
+        const { statement, replacement } = buildWhere('users', whereConditions);
 
         if (user !== null) {
-            if (!user.permissions.user || !user.permissions.user[feature]) {
+            try {
+                const permissionFilter = where().can(user).do(feature, 'user');
+
+                if (permissionFilter !== null) {
+                    statement.push(`(${permissionFilter.statement})`);
+                    Object.assign(replacement, permissionFilter.replacements);
+                }
+            } catch (error) {
+                // une erreur doit signifier que l'utilisateur n'a pas les permissions nécessaires, donc on retourne un tableau vide
                 return [];
             }
-
-            const featureLevel = user.permissions.user[feature].geographic_level;
-            const userLevel = user.organization.location.type;
-
-            if (featureLevel !== 'nation' && (featureLevel !== 'local' || userLevel !== 'nation')) {
-                if (user.organization.location.region === null) {
-                    return [];
-                }
-
-                where.push({
-                    location: {
-                        query: 'organizations.region_code',
-                        value: user.organization.location.region.code,
-                    },
-                });
-            }
         }
-
-        const whereClause = where.map((clauses, index) => {
-            const clauseGroup = Object.keys(clauses).map((column) => {
-                replacements[`${column}${index}`] = clauses[column].value || clauses[column];
-                return `${clauses[column].query || `users.${column}`} ${clauses[column].operator || 'IN'} (:${column}${index})`;
-            }).join(' OR ');
-
-            return `(${clauseGroup})`;
-        }).join(' AND ');
 
         const charte = await charteEngagementModel.getLatest();
         let latestCharte = null;
@@ -240,6 +226,7 @@ module.exports = (database) => {
                 organizations.epci_name,
                 organizations.city_code,
                 organizations.city_name,
+                cities.fk_main AS city_main,
                 organizations.latitude,
                 organizations.longitude,
                 organization_types.organization_type_id,
@@ -271,6 +258,14 @@ module.exports = (database) => {
             LEFT JOIN
                 localized_organizations AS organizations ON users.fk_organization = organizations.organization_id
             LEFT JOIN
+                cities ON organizations.city_code = cities.code
+            LEFT JOIN
+                epci ON organizations.epci_code = epci.code
+            LEFT JOIN
+                departements ON organizations.departement_code = departements.code
+            LEFT JOIN
+                regions ON organizations.region_code = regions.code
+            LEFT JOIN
                 organization_types ON organizations.fk_type = organization_types.organization_type_id
             LEFT JOIN
                 organization_categories ON organization_types.fk_category = organization_categories.uid
@@ -280,7 +275,7 @@ module.exports = (database) => {
                 organizations AS activator_organization ON activator.fk_organization = activator_organization.organization_id
             LEFT JOIN
                 roles_regular ON organization_types.fk_role = roles_regular.role_id
-            ${where.length > 0 ? `WHERE ${whereClause}` : ''}
+            ${statement.length > 0 ? `WHERE ${statement.join(' AND ')}` : ''}
             ORDER BY
                 CASE
                     WHEN
@@ -298,7 +293,7 @@ module.exports = (database) => {
                 upper(users.first_name) ASC`,
             {
                 type: database.QueryTypes.SELECT,
-                replacements,
+                replacements: replacement,
             },
         );
 
@@ -511,7 +506,7 @@ module.exports = (database) => {
         ),
 
         findByOrganizationCategory: (organizationCategoryId, geographicFilter = undefined, filters = {}) => {
-            const where = [
+            const whereArr = [
                 {
                     organizationCategory: {
                         query: 'organization_categories.uid',
@@ -522,14 +517,14 @@ module.exports = (database) => {
 
             if (geographicFilter !== undefined) {
                 if (geographicFilter.type === 'departement') {
-                    where.push({
+                    whereArr.push({
                         departement: {
                             query: 'organizations.departement_code',
                             value: [geographicFilter.value],
                         },
                     });
                 } else if (geographicFilter.type === 'region') {
-                    where.push({
+                    whereArr.push({
                         departement: {
                             query: 'organizations.region_code',
                             value: [geographicFilter.value],
@@ -538,7 +533,7 @@ module.exports = (database) => {
                 }
             }
 
-            return query(where, filters);
+            return query(whereArr, filters);
         },
 
         update: async (userId, values, transaction = undefined) => {
@@ -791,7 +786,7 @@ module.exports = (database) => {
     };
 
     model.findForRegion = async (regionCode, name = undefined) => {
-        const where = [
+        const whereArr = [
             {
                 nationalUser: {
                     query: 'organizations.location_type',
@@ -808,7 +803,7 @@ module.exports = (database) => {
             },
         ];
         if (name !== undefined) {
-            where.push({
+            whereArr.push({
                 firstName: {
                     query: 'users.first_name',
                     operator: 'ILIKE',
@@ -823,7 +818,7 @@ module.exports = (database) => {
             });
         }
 
-        return query(where, {});
+        return query(whereArr, {});
     };
 
     model.getShantytownWatchers = async (shantytownId, includePrivate) => database.query(

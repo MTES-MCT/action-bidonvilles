@@ -1,6 +1,7 @@
 /* eslint-disable newline-per-chained-call */
 const { body } = require('express-validator');
 const { isLatLong, trim } = require('validator');
+const { can } = require('#server/services/permissionService');
 
 // models
 const { sequelize } = require('#db/models');
@@ -51,53 +52,29 @@ module.exports = mode => ([
                 throw new Error('Le code communal est invalide');
             }
 
-            let city;
+            let location;
             try {
-                city = await geoModel.getLocation('city', req.body.citycode);
+                location = await geoModel.getLocation('city', req.body.citycode);
             } catch (e) {
                 throw new Error('Une erreur de lecture en base de données est survenue lors de la validation du code communal');
             }
 
-            if (city === null) {
+            if (location === null) {
                 throw new Error('Le code communal ne correspond à aucune commune référencée en base de données');
             }
 
-            req.body.city = city;
+            req.body.location = location;
             return true;
         })
         // permissions d'écriture
         .custom((value, { req }) => {
-            if (!req.body.city) {
+            if (!req.body.location) {
                 return true;
             }
 
-            const permission = req.user.permissions.shantytown[mode];
-            let geographicLevel = permission.geographic_level;
-            if (permission.geographic_level === 'local') {
-                if (['city', 'epci'].indexOf(req.user.organization.location.type) !== -1) {
-                    geographicLevel = 'departement';
-                } else {
-                    geographicLevel = req.user.organization.location.type;
-                }
-            }
-
-            const wording = mode === 'create' ? 'déclarer' : 'modifier';
-            switch (geographicLevel) {
-                case 'nation':
-                    return true;
-
-                case 'region':
-                case 'departement':
-                case 'epci':
-                case 'city':
-                    if (req.user.organization.location[geographicLevel] === null
-                        || req.body.city[geographicLevel].code !== req.user.organization.location[geographicLevel].code) {
-                        throw new Error(`Vous n'avez pas le droit de ${wording} un site sur ce territoire`);
-                    }
-                    break;
-
-                default:
-                    throw new Error(`Imposible de valider que vous disposez des droits suffisants pour ${wording} un site`);
+            if (!can(req.user).do(mode, 'shantytown').on(req.body.location)) {
+                const wording = mode === 'create' ? 'déclarer' : 'modifier';
+                throw new Error(`Vous n'avez pas le droit de ${wording} un site sur ce territoire`);
             }
 
             return true;
