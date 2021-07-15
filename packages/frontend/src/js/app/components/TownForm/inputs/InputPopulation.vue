@@ -40,7 +40,8 @@ import { extend } from "vee-validate";
 extend("couplesLesserThanTotal", {
     params: ["target"],
     validate(couples, { target: total }) {
-        return parseInt(couples, 10) <= parseInt(total, 10);
+        const totalInt = parseInt(total, 10);
+        return !Number.isInteger(totalInt) || parseInt(couples, 10) <= totalInt;
     },
     message: "Le nombre de ménages doit être inférieur au nombre de personnes"
 });
@@ -48,7 +49,8 @@ extend("couplesLesserThanTotal", {
 extend("minorsLesserThanTotal", {
     params: ["target"],
     validate(minors, { target: total }) {
-        return parseInt(minors, 10) <= parseInt(total, 10);
+        const totalInt = parseInt(total, 10);
+        return !Number.isInteger(totalInt) || parseInt(minors, 10) <= totalInt;
     },
     message: "Le nombre de mineurs doit être inférieur au nombre de personnes"
 });
