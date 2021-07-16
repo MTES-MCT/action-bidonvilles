@@ -114,7 +114,14 @@ export default {
     },
     computed: {
         greeter() {
-            return this.$route.query.email;
+            return {
+                email: this.$route.query.email,
+                first_name: this.$route.query.first_name,
+                last_name: this.$route.query.last_name
+            };
+        },
+        inviteFrom() {
+            return this.$route.query.from;
         },
         errors() {
             const labels = {
@@ -178,7 +185,8 @@ export default {
                         last_name
                     })
                 ),
-                greeter: this.greeter
+                greeter: this.greeter,
+                invite_from: this.inviteFrom
             };
 
             // Préparation du message de confirmation d'envoi des mails

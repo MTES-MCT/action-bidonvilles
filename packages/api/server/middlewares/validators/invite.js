@@ -5,7 +5,12 @@ const userModel = require('#server/models/userModel')(sequelize);
 
 module.exports = [
 
-    body('greeter')
+    body('invite_from')
+        .isString().bail().withMessage('L\'origine de l\'invitation est invalide')
+        .trim()
+        .notEmpty().bail().withMessage('L\'origine de l\'invitation est obligatoire'),
+
+    body('greeter.email')
         .trim()
         .notEmpty().bail().withMessage('Le courriel de la personne a l\'initiative de l\'invitation doit être renseigné')
         .isEmail().bail().withMessage('Le courriel de la personne a l\'initiative de l\'invitation n\'est pas valide')
@@ -16,22 +21,17 @@ module.exports = [
             outlookdotcom_remove_subaddress: false,
             yahoo_remove_subaddress: false,
             icloud_remove_subaddress: false,
-        })
-        .custom(async (value, { req }) => {
-            let user = null;
-
-            try {
-                user = await userModel.findOneByEmail(value);
-                if ((Object.keys(user).length < 1) || (user === null)) {
-                    throw new Error('La personne a l\'initiative de l\'invitation n\'existe pas');
-                }
-            } catch (error) {
-                throw new Error('La personne a l\'initiative de l\'invitation n\'a pas été trouvée');
-            }
-
-            req.greeter_full = user;
-            return true;
         }),
+
+    body('greeter.first_name')
+        .isString().bail().withMessage('Le prénom de la personne à l\'initiative de l\'invitation est invalide')
+        .trim()
+        .notEmpty().bail().withMessage('Le prénom de la personne à l\'initiative de l\'invitation est obligatoire'),
+
+    body('greeter.last_name')
+        .isString().bail().withMessage('Le nom de la personne à l\'initiative de l\'invitation est invalide')
+        .trim()
+        .notEmpty().bail().withMessage('Le nom de la personne à l\'initiative de l\'invitation est obligatoire'),
 
     body('guests')
         .customSanitizer((value) => {

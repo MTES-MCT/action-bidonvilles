@@ -615,7 +615,7 @@ module.exports = {
             recipient,
             variables: {
                 recipientName: formatName(recipient.first_name, recipient.last_name),
-                invitationUrl: `${invitationUrl}?email=${encodeURIComponent(recipient.email)}&${utm}`,
+                invitationUrl: `${invitationUrl}?email=${encodeURIComponent(recipient.email)}&first_name=${recipient.first_name}&last_name=${recipient.last_name}&from=push_mail&${utm}`,
                 backUrl,
                 frontUrl: `${frontUrl}?${utm}`,
             },

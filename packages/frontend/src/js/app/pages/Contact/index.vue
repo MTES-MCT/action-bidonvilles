@@ -26,6 +26,7 @@
                     >
                         <InputGroup>
                             <TextInput
+                                :showMandatoryStar="true"
                                 :label="$t('contactPage.email')"
                                 v-model="commonFields.email"
                                 id="email"
@@ -33,6 +34,7 @@
                                 rules="required|email"
                             />
                             <TextInput
+                                :showMandatoryStar="true"
                                 :label="$t('contactPage.firstname')"
                                 v-model="commonFields.first_name"
                                 id="first_name"
@@ -40,6 +42,7 @@
                                 rules="required"
                             />
                             <TextInput
+                                :showMandatoryStar="true"
                                 :label="$t('contactPage.lastname')"
                                 v-model="commonFields.last_name"
                                 id="last_name"
@@ -47,6 +50,7 @@
                                 rules="required"
                             />
                             <TextInput
+                                :showMandatoryStar="true"
                                 :rows="8"
                                 :label="$t('contactPage.phone')"
                                 v-model="commonFields.phone"
@@ -420,22 +424,29 @@ export default {
             };
             this.loading = true;
             try {
-                const result = await contact(data);
+                // Create a user and send an email to admins
+                await contact(data);
                 this.loading = false;
-                // Si l'utilisateur a demandé un accès, on route vers le formulaire d'invitation
+                let from = null;
+
                 if (this.isRequestAccessAndActor) {
                     this.$trackMatomoEvent(
                         "Demande d'accès",
                         "Demande d'accès"
                     );
-                    this.$router.push(
-                        `/invitation?email=${encodeURIComponent(result.email)}`
-                    );
+                    from = "access_request";
                 } else {
                     this.$trackMatomoEvent("Contact", "Demande d'information");
-
-                    this.$router.push("/");
+                    from = "contact_others";
                 }
+                this.$router.push(
+                    `/invitation?email=${encodeURIComponent(
+                        this.commonFields.email
+                    )}&first_name=${this.commonFields.first_name}&last_name=${
+                        this.commonFields.last_name
+                    }&from=${from}`
+                );
+
                 notify({
                     group: "notifications",
                     type: "success",

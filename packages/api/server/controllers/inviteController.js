@@ -24,16 +24,25 @@ const sendEmailsInvitations = async (guests, greeter) => {
     }
 };
 
-const sendMattermostNotifications = async (guests, greeter) => {
+const sendMattermostNotifications = async (guests, greeter, invite_from) => {
     if (!mattermost) {
         return;
+    }
+    let from = 'via une source non identifiable';
+    // invite_from is initialized in pages/Contact/index.vue or in api/server/amils/mails.js (see sendUserShare)
+    if (invite_from === 'access_request') {
+        from = "via le formulaire de demande d'accès";
+    } else if (invite_from === 'contact_others') {
+        from = "via le formulaire de contact (signaler / aider / demande d'info / demander de l'aide)";
+    } else if (invite_from === 'push_mail') {
+        from = 'via push mail J+15';
     }
 
     for (let i = 0; i < guests.length; i += 1) {
         // Send a mattermost alert, if it fails, do nothing
         try {
             // eslint-disable-next-line no-await-in-loop
-            await triggerPeopleInvitedAlert(guests[i], greeter, "via le formulaire de demande d'accès");
+            await triggerPeopleInvitedAlert(guests[i], greeter, from);
         } catch (err) {
             // eslint-disable-next-line no-console
             console.log(`Error with invited people mattermost webhook : ${Object.entries(err.message).flat()}`);
@@ -43,8 +52,7 @@ const sendMattermostNotifications = async (guests, greeter) => {
 
 module.exports = () => ({
     async invite(req, res, next) {
-        const { greeter_full: greeter } = req;
-        const { guests } = req.body;
+        const { greeter, guests, invite_from } = req.body;
 
         // Send an email to each guest
         try {
@@ -61,7 +69,7 @@ module.exports = () => ({
 
         // Send a mattermost alert for each guest
         try {
-            await sendMattermostNotifications(guests, greeter);
+            await sendMattermostNotifications(guests, greeter, invite_from);
         } catch (err) {
             // ignore
         }
