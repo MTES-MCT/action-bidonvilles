@@ -12,7 +12,7 @@
             >{{ $t("landingPage.newsletter.cta") }}</Button
         >
         <div
-            class="grid grid-cols-1 md:grid-cols-3 text-left gap-8 md:gap-32 mt-6"
+            class="grid grid-cols-1 md:grid-cols-3 text-left gap-8 md:gap-32 mt-6 mb-8"
         >
             <div v-for="newsletter in newsletters" :key="newsletter.link">
                 <div class="capitalize text-primary font-bold">
@@ -28,6 +28,12 @@
                     {{ $t("landingPage.newsletter.link") }}</a
                 >
             </div>
+        </div>
+        <div>
+            <a
+                class="link"
+                href="https://www.gouvernement.fr/resorption-des-bidonvilles"
+                >{{ $t("landingPage.newsletter.viewAll") }}</a>
         </div>
     </div>
 </template>

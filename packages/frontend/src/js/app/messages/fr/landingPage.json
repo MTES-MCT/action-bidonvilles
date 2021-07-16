@@ -145,6 +145,7 @@
       "title": "Abonnez-vous à notre lettre d'information mensuelle",
       "text": "Vous souhaitez être informé des nouveautés de la plateforme, des évènements, des bonnes pratiques de terrain et de l’actualité sur le sujet des bidonvilles ? Abonnez-vous !",
       "cta": "Je m'abonne",
-      "link": "Voir la lettre"
+      "link": "Voir la lettre",
+      "viewAll": "Voir toutes les lettres d'information"
   }
 }
