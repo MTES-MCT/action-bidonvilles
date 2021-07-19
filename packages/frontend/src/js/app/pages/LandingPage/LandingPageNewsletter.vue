@@ -33,7 +33,8 @@
             <a
                 class="link"
                 href="https://www.gouvernement.fr/resorption-des-bidonvilles"
-                >{{ $t("landingPage.newsletter.viewAll") }}</a>
+                >{{ $t("landingPage.newsletter.viewAll") }}</a
+            >
         </div>
     </div>
 </template>
